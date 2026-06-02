@@ -250,6 +250,7 @@ inputs/
 logs/
 runs/
 .cache/
+wheelhouse*/
 *.safetensors
 *.bin
 *.pt
