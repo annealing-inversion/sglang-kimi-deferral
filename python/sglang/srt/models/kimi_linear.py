@@ -542,6 +542,27 @@ class KimiLinearModel(nn.Module):
             pp_rank=self.pp_group.rank_in_group,
             pp_size=self.pp_group.world_size,
             prefix=f"{prefix}.layers",
+            offloader_kwargs=dict(
+                submodule_accessor=lambda layer: (
+                    layer.mlp.experts if isinstance(layer.mlp, KimiMoE) else layer.mlp
+                ),
+                whitelist_param_names_creator=lambda module: (
+                    [
+                        "w13_weight",
+                        "w2_weight",
+                        *(
+                            [
+                                "w13_blockscale_swizzled",
+                                "w2_blockscale_swizzled",
+                            ]
+                            if hasattr(module, "w13_blockscale_swizzled")
+                            else []
+                        ),
+                    ]
+                    if isinstance(module, FusedMoE)
+                    else []
+                ),
+            ),
         )
 
         if self.pp_group.is_last_rank:

@@ -251,6 +251,7 @@ logs/
 runs/
 .cache/
 wheelhouse*/
+.triton/
 *.safetensors
 *.bin
 *.pt
