@@ -247,6 +247,13 @@ lmms-eval
 ctags/
 outputs/
 inputs/
+logs/
+runs/
+.cache/
+*.safetensors
+*.bin
+*.pt
+*.pth
 
 # Eval Cache
 .longbench_cache/
