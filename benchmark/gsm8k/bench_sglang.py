@@ -81,8 +81,10 @@ def main(args):
 
     questions = []
     labels = []
-    for i in range(len(lines[:num_questions])):
-        raw_question = few_shot_examples + get_one_example(lines, i, False)
+    start_index = args.start_index
+    eval_lines = lines[start_index : start_index + num_questions]
+    for i in range(len(eval_lines)):
+        raw_question = few_shot_examples + get_one_example(eval_lines, i, False)
         if tokenizer is not None:
             messages = [{"role": "user", "content": raw_question}]
             raw_question = tokenizer.apply_chat_template(
@@ -92,7 +94,7 @@ def main(args):
                 enable_thinking=True,
             )
         questions.append(raw_question)
-        labels.append(get_answer_value(lines[i]["answer"]))
+        labels.append(get_answer_value(eval_lines[i]["answer"]))
     assert all(l != INVALID for l in labels)
     arguments = [{"question": q} for q in questions]
 
@@ -175,6 +177,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-shots", type=int, default=5)
     parser.add_argument("--data-path", type=str, default="test.jsonl")
+    parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument("--num-questions", type=int, default=200)
     parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.0)
