@@ -73,7 +73,7 @@ def looks_like_next_question(output):
     return bool(re.search(r"(^|\n)\s*question\s*:", output, re.IGNORECASE))
 
 
-def request_completion(url, model, prompt, max_tokens, stop):
+def request_completion(url, model, prompt, max_tokens, stop, timeout):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     payload = {
         "model": model,
@@ -88,7 +88,7 @@ def request_completion(url, model, prompt, max_tokens, stop):
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
-    with opener.open(req, timeout=600) as resp:
+    with opener.open(req, timeout=timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     choice = data["choices"][0]
     return choice["text"], data.get("usage", {}), choice.get("finish_reason")
@@ -107,7 +107,7 @@ def evaluate_one(args, rows, idx):
     prompt = build_prompt(rows, idx, args.num_shots)
     start = time.time()
     output, usage, finish_reason = request_completion(
-        args.url, args.model, prompt, args.max_new_tokens, args.stop
+        args.url, args.model, prompt, args.max_new_tokens, args.stop, args.request_timeout
     )
     latency = time.time() - start
     gold = extract_gold(row["answer"])
@@ -149,6 +149,7 @@ def main():
     parser.add_argument("--parallel", type=int, default=1)
     parser.add_argument("--num-shots", type=int, default=0)
     parser.add_argument("--max-new-tokens", type=int, default=256)
+    parser.add_argument("--request-timeout", type=float, default=1800.0)
     parser.add_argument(
         "--stop",
         action="append",
@@ -171,6 +172,7 @@ def main():
 
     strict_correct = 0
     flexible_correct = 0
+    error_count = 0
     total_completion_tokens = 0
     total_prompt_tokens = 0
     t0 = time.time()
@@ -186,7 +188,29 @@ def main():
                 executor.submit(evaluate_one, args, rows, idx): idx for idx in indices
             }
             for future in as_completed(futures):
-                record = future.result()
+                try:
+                    record = future.result()
+                except Exception as exc:
+                    idx = futures[future]
+                    row = rows[idx]
+                    record = {
+                        "idx": idx,
+                        "prompt": build_prompt(rows, idx, args.num_shots),
+                        "gold_answer": row["answer"],
+                        "gold_extracted": extract_gold(row["answer"]),
+                        "model_output": "",
+                        "strict_extracted": None,
+                        "flexible_extracted": None,
+                        "strict_correct": False,
+                        "flexible_correct": False,
+                        "finish_reason": "error",
+                        "hit_max_tokens": False,
+                        "looks_like_next_question": False,
+                        "latency_s": None,
+                        "usage": {},
+                        "error": repr(exc),
+                    }
+                    error_count += 1
                 completed += 1
                 usage = record["usage"]
                 strict_ok = record["strict_correct"]
@@ -220,6 +244,7 @@ def main():
         else 0,
         "strict_correct": strict_correct,
         "flexible_correct": flexible_correct,
+        "error_count": error_count,
         "wall_time_s": wall_time,
         "requests_per_s": actual_limit / wall_time if wall_time else 0,
         "completion_tokens": total_completion_tokens,
